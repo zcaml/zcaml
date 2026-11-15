@@ -34,8 +34,8 @@ Rebase with `git apply ocamlpath.patch` on a fresh checkout of the commit above.
 
 ## Building
 
-`build.zig` compiles these with `zig cc`/`zig build-exe` (`.ReleaseSmall`, which
-is `-Os`):
+`u-config.zig` compiles these with `zig cc`/`zig build-exe` (`.ReleaseSmall`,
+which is `-Os`):
 
 ```sh
 # POSIX host
