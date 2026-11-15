@@ -52,7 +52,10 @@ platform() {
 platforms="$(for target in x86_64-linux-gnu $TARGETS; do platform "$target"; done | sort -u | tr '\n' ' ')"
 
 # $OVERLAYS, zcaml's overlay, then dune's default repositories, at fixed commits:
-# a build doesn't depend on when it ran.
+# a build doesn't depend on when it ran. The compiler is the toolchain's
+# `ocaml-system`, explicitly: zcaml's dune (from 3.24.2+zcaml.6) prefers it
+# anyway, but builds another compiler for a project that can't use it, and older
+# releases don't.
 zcaml_overlay="${OVERLAY-$(cd "$(dirname "${BASH_SOURCE[0]}")/../overlay" && pwd)}"
 overlays=""
 for overlay in ${OVERLAYS:-} ${zcaml_overlay:+"zcaml=file://$(cd "$zcaml_overlay" && pwd)"}; do

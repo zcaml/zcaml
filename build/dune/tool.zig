@@ -47,6 +47,7 @@ pub fn main(init: std.process.Init) !void {
     defer Dir.cwd().deleteTree(io, work) catch {};
     try setVersion(io, arena, work);
     try addCrossHooks(io, arena, work);
+    try addPathCompilerHooks(io, arena, work);
 
     var env = try init.environ_map.clone(arena);
     try env.put("PATH", try std.mem.join(arena, if (builtin.os.tag == .windows) ";" else ":", &.{
@@ -103,8 +104,8 @@ fn setVersion(io: Io, arena: std.mem.Allocator, work: []const u8) !void {
     try Dir.cwd().writeFile(io, .{ .sub_path = project_path, .data = try std.fmt.allocPrint(arena, "{s}\n(version {s}+zcaml.{d})\n", .{ project, version, revision }) });
 }
 
-/// Cross-compiling a lock directory's packages with `-x` (`cross_pkg.ml`): the only
-/// changes to dune's source.
+/// Cross-compiling a lock directory's packages with `-x` (`cross_pkg.ml`). With
+/// `addPathCompilerHooks`, the only changes to dune's source.
 fn addCrossHooks(io: Io, arena: std.mem.Allocator, work: []const u8) !void {
     try Dir.cwd().writeFile(io, .{
         .sub_path = try path.join(arena, &.{ work, "src", "dune_rules", "cross_pkg.ml" }),
@@ -194,12 +195,41 @@ fn addCrossHooks(io: Io, arena: std.mem.Allocator, work: []const u8) !void {
     );
 }
 
+/// `dune pkg lock` locking a zcaml toolchain on `PATH` as `ocaml-system`, when the
+/// project can use it (`path_compiler.ml`).
+fn addPathCompilerHooks(io: Io, arena: std.mem.Allocator, work: []const u8) !void {
+    try Dir.cwd().writeFile(io, .{
+        .sub_path = try path.join(arena, &.{ work, "bin", "pkg", "path_compiler.ml" }),
+        .data = @embedFile("path_compiler.ml"),
+    });
+    try replaceOnce(io, arena, work, "bin/pkg/lock.ml",
+        \\      ~constraints:(constraints_of_workspace workspace ~lock_dir_path)
+        \\      ~selected_depopts
+    ,
+        \\      ~constraints
+        \\      ~selected_depopts
+    );
+    try replaceOnce(io, arena, work, "bin/pkg/lock.ml",
+        \\  let* result =
+        \\    solve_multiple_platforms
+    ,
+        \\  let* result =
+        \\    Path_compiler.prefer
+        \\      lock_dir
+        \\      ~pins
+        \\      ~constraints:(constraints_of_workspace workspace ~lock_dir_path)
+        \\      ~solve_for_platforms
+        \\    @@ fun ~constraints ~solve_for_platforms ->
+        \\    solve_multiple_platforms
+    );
+}
+
 /// Replaces `old`, which must be in the file exactly once: fails loudly when dune changes.
 fn replaceOnce(io: Io, arena: std.mem.Allocator, work: []const u8, file: []const u8, old: []const u8, new: []const u8) !void {
     const full = try path.join(arena, &.{ work, file });
     const text = try Dir.cwd().readFileAlloc(io, full, arena, .unlimited);
-    const i = std.mem.find(u8, text, old) orelse fatal("{s}: no '{s}' to hook into: update addCrossHooks for this dune", .{ file, old });
-    if (std.mem.findPos(u8, text, i + old.len, old) != null) fatal("{s}: '{s}' more than once: update addCrossHooks for this dune", .{ file, old });
+    const i = std.mem.find(u8, text, old) orelse fatal("{s}: no '{s}' to hook into: update the hooks for this dune", .{ file, old });
+    if (std.mem.findPos(u8, text, i + old.len, old) != null) fatal("{s}: '{s}' more than once: update the hooks for this dune", .{ file, old });
     try Dir.cwd().writeFile(io, .{ .sub_path = full, .data = try std.mem.concat(arena, u8, &.{ text[0..i], new, text[i + old.len ..] }) });
 }
 

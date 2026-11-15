@@ -57,6 +57,12 @@ The OCaml toolchains use **Zig 0.17.0** for C/C++ compilation and linking. Make
 `zig` available on `PATH`; a separate GCC or MinGW installation is unnecessary
 for the toolchain.
 
+With an OCaml toolchain's `bin` on `PATH`, zcaml's Dune locks it as the
+project's compiler (`ocaml-system`): `dune pkg lock` needs no compiler settings in
+`dune-workspace`, and builds don't compile OCaml from source. A project that
+needs another compiler, or a `dune-workspace` that chooses one, locks as with
+upstream Dune, as does setting `ZCAML_NO_PATH_COMPILER=1`.
+
 ### Use the overlay
 
 Add the repository ahead of Dune's default repositories in `dune-workspace`:

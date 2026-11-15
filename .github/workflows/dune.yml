@@ -227,5 +227,5 @@ jobs:
           else
             gh release create "$TAG_NAME" "${files[@]}" \
               --title "dune $upstream+zcaml.$revision" \
-              --notes "dune $upstream with zcaml's changes (cross-compiling dune pkg's packages with -x), for every zcaml host, bootstrapped with the $OCAML_TAG toolchains. One binary per host: it works with any OCaml version."
+              --notes "dune $upstream with zcaml's changes (cross-compiling dune pkg's packages with -x, and locking a zcaml OCaml toolchain on PATH as the compiler), for every zcaml host, bootstrapped with the $OCAML_TAG toolchains. One binary per host: it works with any OCaml version."
           fi
