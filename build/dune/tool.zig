@@ -195,32 +195,134 @@ fn addCrossHooks(io: Io, arena: std.mem.Allocator, work: []const u8) !void {
     );
 }
 
-/// `dune pkg lock` locking a zcaml toolchain on `PATH` as `ocaml-system`, when the
-/// project can use it (`path_compiler.ml`).
+/// Locking a zcaml toolchain on `PATH` as `ocaml-system`, when the project can use it
+/// (`path_compiler.ml`): `dune pkg lock`'s and dev tools' solves, and `dune build`'s.
 fn addPathCompilerHooks(io: Io, arena: std.mem.Allocator, work: []const u8) !void {
     try Dir.cwd().writeFile(io, .{
-        .sub_path = try path.join(arena, &.{ work, "bin", "pkg", "path_compiler.ml" }),
+        .sub_path = try path.join(arena, &.{ work, "src", "dune_pkg", "path_compiler.ml" }),
         .data = @embedFile("path_compiler.ml"),
     });
-    try replaceOnce(io, arena, work, "bin/pkg/lock.ml",
-        \\      ~constraints:(constraints_of_workspace workspace ~lock_dir_path)
-        \\      ~selected_depopts
+    try replaceOnce(io, arena, work, "src/dune_pkg/dune_pkg.ml",
+        \\module Opam_solver = Opam_solver
     ,
-        \\      ~constraints
-        \\      ~selected_depopts
+        \\module Opam_solver = Opam_solver
+        \\module Path_compiler = Path_compiler
+    );
+    try replaceOnce(io, arena, work, "bin/pkg/lock.ml",
+        \\let solve_multiple_platforms
+        \\      base_solver_env
+    ,
+        \\let solve_multiple_platforms
+        \\      ~path_compiler
+        \\      base_solver_env
+    );
+    try replaceOnce(io, arena, work, "bin/pkg/lock.ml",
+        \\  let solve_for_env env =
+    ,
+        \\  let solve_for_env ~constraints env =
+    );
+    try replaceOnce(io, arena, work, "bin/pkg/lock.ml",
+        \\    Fiber.parallel_map solve_for_platforms ~f:(fun platform_env ->
+        \\      let solver_env = Solver_env.extend portable_solver_env platform_env in
+        \\      let+ solver_result = solve_for_env solver_env in
+    ,
+        \\    Dune_pkg.Path_compiler.solve path_compiler solve_for_platforms ~constraints
+        \\      ~f:(fun ~constraints platform_env ->
+        \\      let solver_env = Solver_env.extend portable_solver_env platform_env in
+        \\      let+ solver_result = solve_for_env ~constraints solver_env in
     );
     try replaceOnce(io, arena, work, "bin/pkg/lock.ml",
         \\  let* result =
         \\    solve_multiple_platforms
+        \\      solver_env
     ,
-        \\  let* result =
-        \\    Path_compiler.prefer
-        \\      lock_dir
-        \\      ~pins
+        \\  let* path_compiler =
+        \\    Dune_pkg.Path_compiler.find
+        \\      ~env:Stdune.Env.initial
+        \\      ~solver_env:
+        \\        (Option.bind lock_dir ~f:(fun lock_dir -> lock_dir.solver_env)
+        \\         |> Option.value ~default:Solver_env.empty)
+        \\      ~unset_solver_vars:
+        \\        (Option.bind lock_dir ~f:(fun lock_dir -> lock_dir.unset_solver_vars)
+        \\         |> Option.value ~default:Dune_lang.Package_variable_name.Set.empty)
         \\      ~constraints:(constraints_of_workspace workspace ~lock_dir_path)
-        \\      ~solve_for_platforms
-        \\    @@ fun ~constraints ~solve_for_platforms ->
+        \\      ~pins
+        \\  in
+        \\  let* result =
         \\    solve_multiple_platforms
+        \\      ~path_compiler
+        \\      solver_env
+    );
+    // The lock directories `dune build` makes, again when what `find` reads changes:
+    // the `ocamlc` on `PATH` and the opt-out. Their actions' environment has neither:
+    // `find` reads dune's.
+    try replaceOnce(io, arena, work, "src/dune_rules/lock_rules.ml",
+        \\    let* solver_result =
+        \\      if portable_lock_dir
+    ,
+        \\    let* path_compiler =
+        \\      Dune_pkg.Path_compiler.find
+        \\        ~env:(Global.env ())
+        \\        ~solver_env:solver_env_from_context
+        \\        ~unset_solver_vars
+        \\        ~constraints
+        \\        ~pins
+        \\    in
+        \\    let* solver_result =
+        \\      if portable_lock_dir
+    );
+    try replaceOnce(io, arena, work, "src/dune_rules/lock_rules.ml",
+        \\          Fiber.parallel_map solve_for_platforms ~f:(fun platform_env ->
+    ,
+        \\          Dune_pkg.Path_compiler.solve path_compiler solve_for_platforms ~constraints
+        \\            ~f:(fun ~constraints platform_env ->
+    );
+    try replaceOnce(io, arena, work, "src/dune_rules/lock_rules.ml",
+        \\      else
+        \\        Opam_solver.solve_lock_dir
+        \\          solver_env
+        \\          version_preference
+        \\          repos
+        \\          ~pins
+        \\          ~local_packages
+        \\          ~constraints
+        \\          ~selected_depopts
+        \\          ~portable_lock_dir
+        \\    in
+    ,
+        \\      else
+        \\        Dune_pkg.Path_compiler.solve path_compiler [ solver_env ] ~constraints
+        \\          ~f:(fun ~constraints solver_env ->
+        \\            Opam_solver.solve_lock_dir
+        \\              solver_env
+        \\              version_preference
+        \\              repos
+        \\              ~pins
+        \\              ~local_packages
+        \\              ~constraints
+        \\              ~selected_depopts
+        \\              ~portable_lock_dir)
+        \\        >>| List.hd_opt
+        \\        >>| Option.value_exn
+        \\    in
+    );
+    try replaceOnce(io, arena, work, "src/dune_rules/lock_rules.ml",
+        \\            ~sandbox:Sandbox_config.needs_sandboxing)
+    ,
+        \\            ~sandbox:Sandbox_config.needs_sandboxing
+        \\       |> Action.Full.add_env (Dune_pkg.Path_compiler.opt_out_env (Global.env ())))
+    );
+    try replaceOnce(io, arena, work, "src/dune_rules/lock_rules.ml",
+        \\       and+ pins =
+        \\         (* CR-soon Alizter: This pin logic
+    ,
+        \\       and+ () =
+        \\         Action_builder.env_var Dune_pkg.Path_compiler.opt_out
+        \\         >>> (match Bin.which ~path:(Env_path.path (Global.env ())) "ocamlc" with
+        \\              | Some ocamlc -> Action_builder.path ocamlc
+        \\              | None -> Action_builder.return ())
+        \\       and+ pins =
+        \\         (* CR-soon Alizter: This pin logic
     );
 }
 

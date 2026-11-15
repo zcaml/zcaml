@@ -54,7 +54,8 @@ have no revision: link to the tag's release.
   [`build/dune/tool.zig`](build/dune/tool.zig) (1 for a new upstream version).
 - A new upstream Dune: check that `addCrossHooks`' and `addPathCompilerHooks`'
   replacements still apply (the build fails if one doesn't), and test
-  cross-compiling packages and `dune pkg lock` with a toolchain on `PATH`.
+  cross-compiling packages and locking with a toolchain on `PATH` (CI runs
+  `scripts/test-dune-pkg.sh`).
 
 CI bootstraps all seven hosts' Dune on Linux with the latest `ocaml-v*` release
 (or the `ocaml_tag` input), smoke-tests them (distro containers, Wine, macOS

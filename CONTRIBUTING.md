@@ -77,12 +77,15 @@ it prints its usage.
 ```sh
 zig build -Docaml dune -Docaml-host=native
 scripts/test-dune.sh zig-out/dune/x86_64-linux-gnu/bin/dune 3.24.2+zcaml.6
+scripts/test-dune-pkg.sh zig-out/dune/x86_64-linux-gnu/bin/dune \
+  zig-out/5.5.1/host-x86_64-linux-gnu/target-x86_64-linux-gnu
 ```
 
 The version is the pinned Dune's, with the revision in
 [`build/dune/tool.zig`](build/dune/tool.zig). The smoke test only checks the
-version and creating a project: exercise changes to cross-compilation or locking
-with an affected project or the ecosystem probes.
+version and creating a project, and `test-dune-pkg.sh` the compiler a lock picks
+with a toolchain on `PATH` (fake packages, no network): exercise changes to
+cross-compilation or locking with an affected project or the ecosystem probes.
 
 ### Overlay and ecosystem packages
 

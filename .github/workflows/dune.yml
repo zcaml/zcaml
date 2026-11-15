@@ -120,7 +120,10 @@ jobs:
           }
           for h in $HOSTS; do
             case "$h" in
-              x86_64-linux-gnu) scripts/test-dune.sh "zig-out/dune/$h/bin/dune" "$version" ;;
+              x86_64-linux-gnu)
+                scripts/test-dune.sh "zig-out/dune/$h/bin/dune" "$version"
+                scripts/test-dune-pkg.sh "zig-out/dune/$h/bin/dune" "$TOOLCHAINS/host-$NATIVE/target-$h"
+                ;;
               aarch64-linux-gnu) in_docker linux/arm64 ubuntu:24.04 "" "$h" ;;
               x86_64-linux-musl) in_docker linux/amd64 alpine:3.22 "apk add --no-cache bash >/dev/null" "$h" ;;
               aarch64-linux-musl) in_docker linux/arm64 alpine:3.22 "apk add --no-cache bash >/dev/null" "$h" ;;

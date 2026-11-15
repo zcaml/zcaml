@@ -58,7 +58,8 @@ The OCaml toolchains use **Zig 0.17.0** for C/C++ compilation and linking. Make
 for the toolchain.
 
 With an OCaml toolchain's `bin` on `PATH`, zcaml's Dune locks it as the
-project's compiler (`ocaml-system`): `dune pkg lock` needs no compiler settings in
+project's compiler (`ocaml-system`): `dune pkg lock`, `dune build`'s own locking
+(with `(pkg enabled)`) and `dune tools` need no compiler settings in
 `dune-workspace`, and builds don't compile OCaml from source. A project that
 needs another compiler, or a `dune-workspace` that chooses one, locks as with
 upstream Dune, as does setting `ZCAML_NO_PATH_COMPILER=1`.
