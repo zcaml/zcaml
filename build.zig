@@ -127,6 +127,33 @@ pub fn build(b: *std.Build) !void {
         }
         return;
     }
+
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    const clappy = b.dependency("clappy", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("clappy");
+
+    const zcaml_cli_exe = b.addExecutable(.{
+        .name = "zcaml",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "clappy", .module = clappy },
+            },
+        }),
+    });
+    b.installArtifact(zcaml_cli_exe);
+    check_step.dependOn(&zcaml_cli_exe.step);
+
+    const run_step = b.step("run", "run zcaml's CLI");
+    const run_zcaml_cli = b.addRunArtifact(zcaml_cli_exe);
+    run_zcaml_cli.addPassthruArgs();
+    run_step.dependOn(&run_zcaml_cli.step);
 }
 
 /// Dune for every `targets` (and the build machine), bootstrapped with the native

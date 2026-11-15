@@ -29,6 +29,10 @@
             .hash = "N-V-__8AAKGZ4wA_nr6n59UoO6EvD2KC10kWgAm9zkvU2glL",
             .lazy = true,
         },
+        .clappy = .{
+            .url = "git+https://github.com/shreyassanthu77/clappy.git#ccbcb1c4dfe9ffea5f33a3364617a24c082a7558",
+            .hash = "clappy-0.0.1-gIO0iPKDAQB2myhD_QjI75VimDis2Ou7lUgD0ocRBLlu",
+        },
     },
     .minimum_zig_version = "0.17.0",
     .paths = .{""},
