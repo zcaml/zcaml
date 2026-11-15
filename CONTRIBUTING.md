@@ -76,7 +76,7 @@ it prints its usage.
 
 ```sh
 zig build -Docaml dune -Docaml-host=native
-scripts/test-dune.sh zig-out/dune/x86_64-linux-gnu/bin/dune 3.24.2+zcaml.6
+scripts/test-dune.sh zig-out/dune/x86_64-linux-gnu/bin/dune 3.24.2+zcaml.7
 scripts/test-dune-pkg.sh zig-out/dune/x86_64-linux-gnu/bin/dune \
   zig-out/5.5.1/host-x86_64-linux-gnu/target-x86_64-linux-gnu
 ```

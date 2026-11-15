@@ -82,9 +82,9 @@ pub fn main(init: std.process.Init) !void {
     try Dir.copyFile(Dir.cwd(), try path.join(arena, &.{ work, "_boot", "dune.exe" }), Dir.cwd(), out, io, .{});
 }
 
-/// zcaml's revision of the pinned dune, in its version (`3.24.2+zcaml.6`): one more
-/// for each release of the same dune. The release tag says it (`dune-v3.24.2-zcaml.6`).
-const revision = 6;
+/// zcaml's revision of the pinned dune, in its version (`3.24.2+zcaml.7`): one more
+/// for each release of the same dune. The release tag says it (`dune-v3.24.2-zcaml.7`).
+const revision = 7;
 
 /// What `dune subst` does for releases, so `dune --version` isn't `n/a`: the bootstrap
 /// takes the version from `(version <v>)` in `dune-project`. The source is a release
