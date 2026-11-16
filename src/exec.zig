@@ -33,7 +33,9 @@ pub fn run(arena: std.mem.Allocator, io: Io, options: Options) Error!std.process
         .argv = argv,
         .environ_map = options.environ,
         .cwd = options.cwd,
-        .stdout = if (options.stdout_to_stderr) .{ .file = .stderr() } else .inherit,
+        // A pipe, copied: on Windows, std opens a `.file` again, which a pipe
+        // (CI's standard error) can't be.
+        .stdout = if (options.stdout_to_stderr) .pipe else .inherit,
     }) catch |err| switch (err) {
         error.Canceled => |e| return e,
         else => {
@@ -41,6 +43,21 @@ pub fn run(arena: std.mem.Allocator, io: Io, options: Options) Error!std.process
             return error.Reported;
         },
     };
+    if (options.stdout_to_stderr) {
+        var in_buffer: [4096]u8 = undefined;
+        var out_buffer: [4096]u8 = undefined;
+        var reader = child.stdout.?.readerStreaming(io, &in_buffer);
+        var writer = Io.File.stderr().writerStreaming(io, &out_buffer);
+        // To its end, which is the program's: one that fills the pipe waits.
+        _ = reader.interface.streamRemaining(&writer.interface) catch |err| switch (err) {
+            error.ReadFailed => if (reader.err.? == error.Canceled) return error.Canceled,
+            // Our standard error is gone: the rest goes nowhere.
+            error.WriteFailed => _ = reader.interface.discardRemaining() catch |e| switch (e) {
+                error.ReadFailed => if (reader.err.? == error.Canceled) return error.Canceled,
+            },
+        };
+        writer.interface.flush() catch {};
+    }
     return child.wait(io) catch |err| switch (err) {
         error.Canceled => |e| return e,
         else => {
