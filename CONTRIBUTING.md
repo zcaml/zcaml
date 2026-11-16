@@ -9,6 +9,7 @@ Install **Zig 0.17.0** and put `zig` on `PATH`. Zig fetches the pinned
 dependencies into `zig-pkg/`; building OCaml needs no existing OCaml or opam.
 
 ```sh
+zig build                                # the zcaml CLI: zig-out/bin/zcaml
 zig build check                          # compile the build's Zig programs
 zig build -Docaml -Docaml-host=native    # a native OCaml toolchain
 zig build -Docaml dune -Docaml-host=native
@@ -31,10 +32,13 @@ and Wine to run other targets' executables.
 | [`build/ocaml/manifests/`](build/ocaml/manifests/) | Per-version manifests generated from upstream OCaml sources |
 | [`build/dune/`](build/dune/) | Dune bootstrap and its changes for cross-compiling packages |
 | [`overlay/`](overlay/) | The opam overlay, mirrored to `zcaml-overlay` |
-| [`devtools/`](devtools/) | ocamlformat and ocaml-lsp-server: source pins, builds, smoke tests, binary packages |
+| [`src/`](src/) | The `zcaml` CLI: `src/cmd/` are its commands, `src/Index.zig` zcaml.dev's index of the releases it installs |
+| [`site/`](site/) | zcaml.dev, with the index `build/index.zig` writes |
+| [`action.yml`](action.yml), [`action/`](action/) | The GitHub action: installs the CLI and runs `zcaml dist` |
+| [`devtools/`](devtools/) | ocamlformat and ocaml-lsp-server: source pins, smoke tests, binary packages |
 | [`ecosystem/`](ecosystem/) | Package build, link, and execution probes |
-| [`test/fixtures/`](test/fixtures/), [`scripts/`](scripts/) | Toolchain fixtures, Dune and upstream OCaml test runners, shared cross-build setup |
-| [`.github/workflows/`](.github/workflows/) | Releases and overlay mirroring |
+| [`test/fixtures/`](test/fixtures/), [`test/cli/`](test/cli/), [`scripts/`](scripts/) | Toolchain and CLI fixtures, Dune, CLI and upstream OCaml test runners, shared cross-build setup |
+| [`.github/workflows/`](.github/workflows/) | Releases, zcaml.dev, and overlay mirroring |
 | [`.depot/workflows/`](.depot/workflows/) | The ecosystem probes on Depot CI |
 
 ## Checking a change
@@ -134,17 +138,46 @@ depot ci dispatch --repo zcaml/zcaml --workflow ecosystem.yml --ref main \
   [--input group=ml-only] [--input packages="lwt zarith"]
 ```
 
-### Developer tools
+### CLI
 
 ```sh
-TARGETS= devtools/build.sh zig-out/devtools zig-out/5.5.1/host-x86_64-linux-gnu \
-  zig-out/dune/x86_64-linux-gnu/bin ocamlformat 0.29.0
-devtools/test.sh zig-out/devtools/out/x86_64-linux-gnu ocamlformat 0.29.0
+zig build test
+zig build -Doptimize=ReleaseSafe
+TARGETS="x86_64-windows-gnu" BUILD_TARGETS="aarch64-linux-musl aarch64-macos-none" \
+  scripts/test-cli.sh zig-out/bin/zcaml
 ```
 
-`TARGETS` adds hosts, each needing its toolchain; macOS ones also need the SDK
-(`zig build -Dmacos-sdk`, then `ZCAML_MACOS_SDK=$PWD/zig-out/macos-sdk`).
-[Releasing](RELEASING.md#developer-tools) covers the rest.
+`zig build test` runs the unit tests. [`scripts/test-cli.sh`](scripts/test-cli.sh)
+runs the CLI end to end: `zcaml dist` of [`test/cli/hello`](test/cli/hello) for
+this machine, for `TARGETS` (built and tested, so they need Wine, or QEMU and
+the target's libraries) and for `BUILD_TARGETS` (built only), then `zcaml run`.
+It downloads the pinned toolchains to zcaml's store; set `ZCAML_HOME` to keep
+them out of yours.
+
+The action's scripts run outside a workflow with the runner's variables set
+(`RUNNER_OS`, `RUNNER_ARCH`, `RUNNER_TEMP`, `GITHUB_PATH`, `GITHUB_OUTPUT`) and
+`ZCAML_RELEASES_URL` pointing at a directory of archives, as
+[`cli.yml`](.github/workflows/cli.yml) does.
+
+### Developer tools
+
+With a built `zcaml` on `PATH`, as [`devtools.yml`](.github/workflows/devtools.yml)
+does it:
+
+```sh
+devtools/source.sh zig-out/devtools ocamlformat 0.29.0
+cd zig-out/devtools/src
+eval "$(zcaml env --ocaml 5.5.1)"
+dune pkg lock
+zcaml dist --ocaml 5.5.1 -p ocamlformat --name ocamlformat --install-file \
+  --format tar.gz -o ../archives
+```
+
+Then extract the archive and test it:
+`devtools/test.sh <dir> ocamlformat 0.29.0`. For other hosts, set `TARGETS` for
+`devtools/source.sh` (the lock directory's platforms) and pass them to
+`zcaml env` and `zcaml dist` with `-t`. [Releasing](RELEASING.md#developer-tools)
+covers the rest.
 
 ## Sending a change
 

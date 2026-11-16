@@ -28,6 +28,11 @@ adding targets, and setting up SDKs.
 You'll use ordinary commands such as `dune`, `ocamllsp`, and `ocamlformat`, with
 zcaml selecting the appropriate versions from your project's requirements.
 
+Its first commands are in this repository, not yet released: `zcaml dist` builds
+a dune pkg project for other platforms in CI, with the toolchains it installs,
+and archives the result; a GitHub action ([`action.yml`](action.yml)) wraps it.
+[Contributing](CONTRIBUTING.md#cli) has how to build and try it.
+
 **The distributions and overlay are available today and can be used without the
 CLI.** They can also be used independently of each other, subject to individual
 tools' and packages' build requirements.
