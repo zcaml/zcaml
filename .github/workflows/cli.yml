@@ -3,7 +3,7 @@ name: CLI
 # Release tags: zcaml-v<version>, build.zig.zon's version (checked against the
 # build), which `zcaml --version` prints:
 #   zcaml-v0.1.0 -> zcaml 0.1.0
-# Never move an existing tag.
+# A released tag never moves (RELEASING.md).
 #
 # The CLI is one binary per host, cross-compiled on Linux: Linux's are static, for
 # glibc and musl systems alike. It installs the releases zcaml.dev's index has

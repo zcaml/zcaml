@@ -3,7 +3,7 @@ name: Dev tools
 # Release tags: <package>-v<version>-zcaml.<revision>, of a devtools/devtools.txt
 # tool, a build of it (one more for each release of the same version):
 #   ocamlformat-v0.29.0-zcaml.1 -> ocamlformat 0.29.0, build 1
-# Never move an existing tag.
+# A released tag never moves (RELEASING.md).
 #
 # A tool is built from its release's sources, as a dune pkg project
 # (devtools/source.sh), for every zcaml host, on Linux, by this checkout's zcaml

@@ -32,6 +32,16 @@ CI publishes the GitHub Release once every build and test passes. Re-running a
 tag's workflow uploads over its assets (`--clobber`), e.g. to finish a failed
 run.
 
+A tag whose workflow failed before publishing has no release, so nothing uses
+it: fix the failure, then move the tag to the fix, and its workflow runs again:
+
+```sh
+git tag -f <tag> && git push -f origin <tag>
+```
+
+A tag with a release never moves: what's published is what it names. Fix that
+with the next revision or version.
+
 When updating everything, the order is OCaml, then Dune (bootstrapped with the
 latest OCaml release), then the developer tools and their overlay packages, then
 the CLI and the action. Each OCaml and dune release is in zcaml.dev's index as

@@ -4,7 +4,7 @@ name: Toolchains
 #   ocaml-v5.5.1     -> OCaml 5.5.1, zcaml revision 1 (implicit)
 #   ocaml-v5.5.1-2   -> OCaml 5.5.1, zcaml revision 2 (same upstream, new build)
 # The upstream version is parsed from the tag; the revision is only used to
-# distinguish releases. Never move an existing tag -- bump the revision.
+# distinguish releases. A released tag never moves (RELEASING.md) -- bump the revision.
 
 on:
   push:

@@ -5,7 +5,7 @@ name: Dune
 #   dune-v3.24.2-zcaml.5 -> dune 3.24.2 with zcaml's changes, revision 5
 # The dune built is the one pinned in build.zig.zon, with the revision in
 # build/dune/tool.zig; the tag has to name its version (checked against the
-# build). Never move an existing tag.
+# build). A released tag never moves (RELEASING.md).
 #
 # Dune is one binary per host, for any OCaml version. All of them are bootstrapped
 # on Linux, with the x86_64-linux-gnu-hosted toolchains of a published OCaml
