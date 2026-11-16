@@ -1,0 +1,8 @@
+(lang dune 3.24)
+(name hello)
+(version 0.1.0)
+(package
+ (name hello)
+ (depends
+  (ocaml (>= 5.5))
+  cmdliner))

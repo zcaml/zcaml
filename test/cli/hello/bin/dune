@@ -1,0 +1,10 @@
+(executable
+ (name main)
+ (public_name hello)
+ (package hello)
+ (libraries cmdliner))
+
+(install
+ (section share)
+ (package hello)
+ (files greeting.txt))

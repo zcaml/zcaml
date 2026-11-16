@@ -1,0 +1,38 @@
+(lang package 0.1)
+
+(dependency_hash 5f0b697c3441d7f5232beba184c76d77)
+
+(ocaml ocaml-system)
+
+(repositories
+ (complete true)
+ (used
+  ((source
+    https://github.com/zcaml/zcaml-overlay.git#72ef139e7e841b80ca7d3ca0201d4179c6b2219c))
+  ((source
+    https://github.com/ocaml-dune/opam-overlays.git#99fc2e18c45b4761ed5f6d282910c03c97e32bce))
+  ((source
+    https://github.com/ocaml/opam-repository.git#a20469e4e6ec4200c243b6ce3e4f3142990a43e7))))
+
+(expanded_solver_variable_bindings
+ (variable_values
+  (post true)
+  (opam-version 2.2.0))
+ (unset_variables with-test sys-ocaml-libc sys-ocaml-cc sys-ocaml-arch build))
+
+(solved_for_platforms
+ ((arch x86_64)
+  (os linux)
+  (sys-ocaml-version 5.5.1))
+ ((arch arm64)
+  (os linux)
+  (sys-ocaml-version 5.5.1))
+ ((arch x86_64)
+  (os macos)
+  (sys-ocaml-version 5.5.1))
+ ((arch arm64)
+  (os macos)
+  (sys-ocaml-version 5.5.1))
+ ((arch x86_64)
+  (os win32)
+  (sys-ocaml-version 5.5.1)))

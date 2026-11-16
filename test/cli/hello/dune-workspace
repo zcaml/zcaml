@@ -1,0 +1,14 @@
+(lang dune 3.24)
+(repository
+ (name zcaml)
+ (url git+https://github.com/zcaml/zcaml-overlay.git))
+(lock_dir
+ (repositories zcaml overlay upstream)
+ (solver_env (sys-ocaml-version 5.5.1))
+ (constraints (ocaml-system (= 5.5.1)))
+ (solve_for_platforms
+  ((arch x86_64) (os linux))
+  ((arch arm64) (os linux))
+  ((arch x86_64) (os macos))
+  ((arch arm64) (os macos))
+  ((arch x86_64) (os win32) (sys-ocaml-arch x86_64) (sys-ocaml-cc cc) (sys-ocaml-libc msvc))))

@@ -1,0 +1,19 @@
+(version 2.1.1+zcaml)
+
+(build
+ (all_platforms
+  ((action
+    (progn
+     (patch cmdliner-tool.patch)
+     (run dune build -p %{pkg-self:name} -j %{jobs}))))))
+
+(depends
+ (all_platforms
+  (dune ocaml)))
+
+(source
+ (fetch
+  (url
+   https://github.com/dune-universe/cmdliner/releases/download/v2.1.1%2Bdune/cmdliner-2.1.1.dune.tbz)
+  (checksum
+   sha512=4e9534d0d2896cc80ae0e3aaa9a64b09044be16f0c571118d8f4367009b912f6d3ebeeeddab2ac4567ec9339d365f9f97802858acf86753e90e500301d019f77)))

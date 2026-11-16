@@ -136,6 +136,14 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     }).module("clappy");
 
+    // The overlay's packages that replace opam-repository's (`+zcaml`), for the
+    // CLI's hint when a lock directory has upstream's.
+    const overlay_options = b.addOptions();
+    overlay_options.addOption([]const []const u8, "replaced", overlayReplaced(b));
+    // What `zcaml --version` prints: build.zig.zon's, which a release's tag names.
+    const cli_options = b.addOptions();
+    cli_options.addOption([]const u8, "version", @import("build.zig.zon").version);
+
     const zcaml_cli_exe = b.addExecutable(.{
         .name = "zcaml",
         .root_module = b.createModule(.{
@@ -144,9 +152,13 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "clappy", .module = clappy },
+                .{ .name = "overlay", .module = overlay_options.createModule() },
+                .{ .name = "build_options", .module = cli_options.createModule() },
             },
         }),
     });
+    // The key zcaml's index is signed with (src/Index.zig).
+    zcaml_cli_exe.root_module.addAnonymousImport("index.pub", .{ .root_source_file = b.path("index.pub") });
     b.installArtifact(zcaml_cli_exe);
     check_step.dependOn(&zcaml_cli_exe.step);
 
@@ -154,6 +166,58 @@ pub fn build(b: *std.Build) !void {
     const run_zcaml_cli = b.addRunArtifact(zcaml_cli_exe);
     run_zcaml_cli.addPassthruArgs();
     run_step.dependOn(&run_zcaml_cli.step);
+
+    const test_step = b.step("test", "run the CLI's unit tests");
+    const zcaml_cli_tests = b.addTest(.{ .root_module = zcaml_cli_exe.root_module });
+    test_step.dependOn(&b.addRunArtifact(zcaml_cli_tests).step);
+
+    // `zig build index -- <out.json>`: zcaml.dev's index (src/Index.zig), from
+    // what's published. See RELEASING.md.
+    const index_step = b.step("index", "write zcaml's index, the releases the CLI installs, from published ones");
+    const index_module = b.createModule(.{ .root_source_file = b.path("src/Index.zig") });
+    index_module.addAnonymousImport("index.pub", .{ .root_source_file = b.path("index.pub") });
+    const index_exe = b.addExecutable(.{
+        .name = "index",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("build/index.zig"),
+            .target = b.graph.host,
+            .imports = &.{
+                .{ .name = "Index", .module = index_module },
+            },
+        }),
+    });
+    check_step.dependOn(&index_exe.step);
+    const run_index = b.addRunArtifact(index_exe);
+    run_index.addPassthruArgs();
+    index_step.dependOn(&run_index.step);
+}
+
+/// The names of `overlay/packages`' packages with a `+zcaml` version, sorted.
+fn overlayReplaced(b: *std.Build) []const []const u8 {
+    const io = b.graph.io;
+    var names: std.ArrayList([]const u8) = .empty;
+    const packages_path = b.root.joinString(b.allocator, "overlay/packages") catch @panic("OOM");
+    var packages = std.Io.Dir.cwd().openDir(io, packages_path, .{ .iterate = true }) catch |err|
+        std.debug.panic("cannot read overlay/packages: {t}", .{err});
+    defer packages.close(io);
+    var it = packages.iterate();
+    while (it.next(io) catch |err| std.debug.panic("cannot read overlay/packages: {t}", .{err})) |entry| {
+        if (entry.kind != .directory) continue;
+        var versions = packages.openDir(io, entry.name, .{ .iterate = true }) catch continue;
+        defer versions.close(io);
+        var versions_it = versions.iterate();
+        while (versions_it.next(io) catch null) |version| {
+            if (std.mem.find(u8, version.name, "+zcaml") == null) continue;
+            names.append(b.allocator, b.dupe(entry.name)) catch @panic("OOM");
+            break;
+        }
+    }
+    std.mem.sort([]const u8, names.items, {}, struct {
+        fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+            return std.mem.order(u8, lhs, rhs) == .lt;
+        }
+    }.lessThan);
+    return names.items;
 }
 
 /// Dune for every `targets` (and the build machine), bootstrapped with the native

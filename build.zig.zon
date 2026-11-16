@@ -30,8 +30,8 @@
             .lazy = true,
         },
         .clappy = .{
-            .url = "git+https://github.com/shreyassanthu77/clappy.git#ccbcb1c4dfe9ffea5f33a3364617a24c082a7558",
-            .hash = "clappy-0.0.1-gIO0iPKDAQB2myhD_QjI75VimDis2Ou7lUgD0ocRBLlu",
+            .url = "git+https://github.com/shreyassanthu77/clappy.git#d1dc810966f1c0725b8e628b684fb29649c9decb",
+            .hash = "clappy-0.0.1-gIO0iPCbAQDwbolvlgX9FVbNBqHJYjJynwdPgHEoX8rQ",
         },
     },
     .minimum_zig_version = "0.17.0",
