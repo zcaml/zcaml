@@ -305,6 +305,11 @@ fn stage(dist: *const Dist, target: Target) ![]const archive.Entry {
             if (program and target.os() == .windows and !std.ascii.endsWithIgnoreCase(rel, ".exe")) {
                 if (try Runner.inspect(arena, io, file.path) == .pe) rel = try std.fmt.allocPrint(arena, "{s}.exe", .{rel});
             }
+            // On Windows, dune names every context's programs as Windows': one
+            // for another system has the `.exe` it doesn't take.
+            if (program and target.os() != .windows and std.ascii.endsWithIgnoreCase(rel, ".exe")) {
+                if (try Runner.inspect(arena, io, file.path) != .pe) rel = rel[0 .. rel.len - ".exe".len];
+            }
             const executable = program or
                 (Io.File.Permissions.has_executable_bit and stat.permissions.toMode() & 0o111 != 0);
 
