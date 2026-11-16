@@ -135,6 +135,13 @@ pub fn prepare(store: *Store, selection: Selection) Error!Environment {
     const host = selection.host;
     const release = selection.release;
     const targets = selection.targets;
+    if (builtin.os.tag == .windows and !windows.RtlAreLongPathsEnabled().toBool()) log.warn(
+        \\Windows' long paths are off: dune pkg builds a project's packages in directories
+        \\whose paths can be longer than 260 characters, and those builds fail. To turn them
+        \\on, as an administrator:
+        \\
+        \\  reg add HKLM\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1 /f
+    , .{});
 
     // `resolve` checked zcaml ships them.
     var installs: std.ArrayList(Store.Install) = .empty;
@@ -196,6 +203,12 @@ pub fn prepare(store: *Store, selection: Selection) Error!Environment {
         .vars = vars.items,
     };
 }
+
+const windows = struct {
+    /// Whether this process takes paths longer than `MAX_PATH`: the system's
+    /// LongPathsEnabled, and zcaml's manifest (src/windows.manifest).
+    extern "ntdll" fn RtlAreLongPathsEnabled() callconv(.winapi) std.os.windows.BOOLEAN;
+};
 
 /// `parent`'s environment, with this one's on top: a build's or a test's.
 pub fn environMap(env: *const Environment, gpa: std.mem.Allocator, parent: *const std.process.Environ.Map) !std.process.Environ.Map {

@@ -126,6 +126,8 @@ pub const Install = struct {
     dir: []const u8,
     download: Download,
     layout: Layout,
+    /// Windows' programs: each `.exe` gets a manifest (`windows.manifest`).
+    manifests: bool = false,
 };
 
 pub const ResolveError = error{
@@ -142,6 +144,7 @@ pub fn ocaml(store: *Store, release: *const Index.Ocaml, host: Target, target: T
         .dir = try store.dirPath("ocaml/{s}-{d}/host-{t}/target-{t}", .{ release.version, release.revision, host, target }),
         .download = archive.download,
         .layout = .as_is,
+        .manifests = host.os() == .windows,
     };
 }
 
@@ -156,6 +159,7 @@ pub fn dune(store: *Store, release: *const Index.Dune, host: Target) ResolveErro
         .dir = try store.dirPath("dune/{s}/host-{t}", .{ version, host }),
         .download = archive.download,
         .layout = .as_is,
+        .manifests = host.os() == .windows,
     };
 }
 
@@ -282,6 +286,7 @@ fn installInto(store: *Store, item: *const Install, node: std.Progress.Node) !vo
         defer archive.close(io);
         try store.unpack(archive, download.format, unpacked);
         if (item.layout == .macos_sdk) try sdkLayout(io, unpacked);
+        if (item.manifests) try addManifests(store.gpa, io, unpacked);
     }
 
     const source = switch (item.layout) {
@@ -454,6 +459,26 @@ fn zstdWindowLen(reader: *Io.Reader) !u32 {
 
 /// `dir`'s `Frameworks`, `include` and `lib` (in its one directory), as Xcode's
 /// SDK has them, in `dir/sdk`.
+/// Next to each `.exe`, before it first runs: Windows caches what an
+/// executable's manifest is. A toolchain's programs have none of their own, and
+/// a build's paths can be longer than Windows takes from a program without one.
+fn addManifests(gpa: std.mem.Allocator, io: Io, unpacked: Io.Dir) !void {
+    // Windows lists only a directory opened to.
+    var dir = try unpacked.openDir(io, ".", .{ .iterate = true });
+    defer dir.close(io);
+    var walker = try dir.walk(gpa);
+    defer walker.deinit();
+    while (try walker.next(io)) |entry| {
+        if (entry.kind != .file or !std.ascii.endsWithIgnoreCase(entry.basename, ".exe")) continue;
+        // From `dir`: on Windows, the walker's directories are open to read.
+        const name = try std.fmt.allocPrint(gpa, "{s}.manifest", .{entry.path});
+        defer gpa.free(name);
+        try dir.writeFile(io, .{ .sub_path = name, .data = windows_manifest });
+    }
+}
+
+const windows_manifest = @embedFile("windows.manifest");
+
 fn sdkLayout(io: Io, dir: Io.Dir) !void {
     var buffer: [Io.Dir.max_path_bytes]u8 = undefined;
     var root_name: std.ArrayList(u8) = .initBuffer(&buffer);

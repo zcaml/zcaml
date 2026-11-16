@@ -157,6 +157,8 @@ pub fn build(b: *std.Build) !void {
             },
         }),
     });
+    // Long paths, where Windows allows them (src/Environment.zig).
+    if (target.result.os.tag == .windows) zcaml_cli_exe.win32_manifest = b.path("src/windows.manifest");
     // The key zcaml's index is signed with (src/Index.zig).
     zcaml_cli_exe.root_module.addAnonymousImport("index.pub", .{ .root_source_file = b.path("index.pub") });
     b.installArtifact(zcaml_cli_exe);
