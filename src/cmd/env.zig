@@ -40,7 +40,7 @@ pub fn run(self: *const Self, init: std.process.Init) !void {
     if (self.github) return writeGithub(&env, init);
 
     var buffer: [4096]u8 = undefined;
-    var stdout = std.Io.File.stdout().writer(init.io, &buffer);
+    var stdout = std.Io.File.stdout().writerStreaming(init.io, &buffer);
     const w = &stdout.interface;
     try w.writeAll("export PATH=");
     for (env.path) |dir| try w.print("{f}:", .{shQuote(dir)});

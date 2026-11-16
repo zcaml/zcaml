@@ -209,7 +209,7 @@ pub fn run(init: std.process.Init, options: Options) !void {
     try dist.out.writeFile(io, .{ .sub_path = sums_name, .data = sums.written() });
 
     var buffer: [1024]u8 = undefined;
-    var stdout = Io.File.stdout().writer(io, &buffer);
+    var stdout = Io.File.stdout().writerStreaming(io, &buffer);
     for (artifacts.items) |artifact| try stdout.interface.print("{f}\n", .{std.fs.path.fmtJoin(&.{ options.out, artifact.name })});
     try stdout.interface.print("{f}\n", .{std.fs.path.fmtJoin(&.{ options.out, sums_name })});
     try stdout.interface.flush();
