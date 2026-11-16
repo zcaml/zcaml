@@ -72,7 +72,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/ecosystem/cache
-          key: ecosystem-cache-${{ runner.os }}-${{ env.OCAML_TAG }}-${{ env.DUNE_TAG }}-${{ hashFiles('ecosystem/packages.tsv', 'ecosystem/probe.sh', 'ecosystem/run.sh', 'scripts/cross-env.sh', 'overlay/packages/**', 'build/dune/**', 'build.zig', 'build.zig.zon') }}
+          key: ecosystem-cache-${{ runner.os }}-${{ env.OCAML_TAG }}-${{ env.DUNE_TAG }}-${{ hashFiles('ecosystem/packages.tsv', 'ecosystem/probe.sh', 'ecosystem/run.sh', 'scripts/cross-env.sh', 'scripts/repositories.sh', 'overlay/packages/**', 'build/dune/**', 'build.zig', 'build.zig.zon') }}
           restore-keys: |
             ecosystem-cache-${{ runner.os }}-${{ env.OCAML_TAG }}-${{ env.DUNE_TAG }}-
 

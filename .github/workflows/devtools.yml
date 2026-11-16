@@ -5,13 +5,14 @@ name: Dev tools
 #   ocamlformat-v0.29.0-zcaml.1 -> ocamlformat 0.29.0, build 1
 # Never move an existing tag.
 #
-# A tool is built from its release's sources with dune pkg (devtools/build.sh),
-# for every zcaml host, on Linux, with the x86_64-linux-gnu-hosted toolchains of
-# an OCaml release and zcaml's dune. Then it's smoke-tested (devtools/test.sh):
-# the Linux builds in distro containers (other architectures through qemu), the
-# Windows one under Wine, the macOS ones on macOS, natively and under Rosetta.
-# Each host's is a .tar.gz (dune pkg doesn't extract .tar.zst), with an install
-# file: devtools/overlay.sh makes overlay/'s binary packages of a release.
+# A tool is built from its release's sources, as a dune pkg project
+# (devtools/source.sh), for every zcaml host, on Linux, by this checkout's zcaml
+# CLI: `zcaml dist`, with the OCaml toolchains, dune and macOS SDK of
+# zcaml.dev's index. Then it's smoke-tested (devtools/test.sh): the Linux builds in
+# distro containers (other architectures through qemu), the Windows one under
+# Wine, the macOS ones on macOS, natively and under Rosetta. Each host's is a
+# .tar.gz (dune pkg doesn't extract .tar.zst), with an install file:
+# devtools/overlay.sh makes overlay/'s binary packages of a release.
 
 on:
   push:
@@ -34,10 +35,9 @@ permissions:
 
 env:
   ZIG_VERSION: "0.17.0"
-  # What scripts/cross-env.sh's lock directory is for: OCaml 5.5.1.
-  OCAML_TAG: "ocaml-v5.5.1-13"
+  # What scripts/repositories.sh's lock directory is for, and one zcaml.dev's
+  # index has.
   OCAML_VERSION: "5.5.1"
-  DUNE_TAG: "dune-v3.24.2-zcaml.5"
   NATIVE: x86_64-linux-gnu
   TARGETS: >-
     aarch64-linux-gnu x86_64-linux-musl aarch64-linux-musl x86_64-windows-gnu
@@ -97,33 +97,30 @@ jobs:
           version: ${{ env.ZIG_VERSION }}
           use-cache: false
 
-      - name: Download the toolchains and dune
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
+      - name: Build zcaml
         run: |
-          set -euo pipefail
-          root="$RUNNER_TEMP/toolchains/$OCAML_VERSION/host-$NATIVE"
-          for t in $NATIVE $TARGETS; do
-            archive="ocaml-$OCAML_VERSION-host-$NATIVE-target-$t.tar.zst"
-            gh release download "$OCAML_TAG" --pattern "$archive" --dir "$RUNNER_TEMP"
-            mkdir -p "$root/target-$t"
-            zstd -d -q -c "$RUNNER_TEMP/$archive" | tar -xf - -C "$root/target-$t"
-            rm "$RUNNER_TEMP/$archive"
-          done
-          mkdir -p "$RUNNER_TEMP/dune"
-          gh release download "$DUNE_TAG" --pattern "dune-${DUNE_TAG#dune-v}-$NATIVE.tar.zst" --output - |
-            zstd -d -q | tar -xf - -C "$RUNNER_TEMP/dune"
-          "$RUNNER_TEMP/dune/bin/dune" --version
-          { echo "TOOLCHAINS=$root"; echo "DUNE_BIN=$RUNNER_TEMP/dune/bin"; } >> "$GITHUB_ENV"
+          zig build --summary failures -Doptimize=ReleaseSafe
+          echo "$PWD/zig-out/bin" >> "$GITHUB_PATH"
 
-      - name: Install the macOS SDK
-        run: |
-          zig build -Dmacos-sdk --summary failures
-          echo "ZCAML_MACOS_SDK=$PWD/zig-out/macos-sdk" >> "$GITHUB_ENV"
+      - name: Make the tool's project
+        run: devtools/source.sh "$RUNNER_TEMP/work" "$PACKAGE" "$VERSION"
 
+      # dune and the toolchains, for the next step: zcaml doesn't lock.
+      - name: Install the toolchains and dune
+        run: zcaml env --ocaml "$OCAML_VERSION" -t "native,${TARGETS// /,}" --github
+
+      - name: Lock its dependencies
+        working-directory: ${{ runner.temp }}/work/src
+        run: dune pkg lock
+
+      # All of the project's packages are built (the lock directory is for all of
+      # them); $PACKAGE's files are archived, with an install file for them.
       - name: Build
-        run: devtools/build.sh "$RUNNER_TEMP/work" "$TOOLCHAINS" "$DUNE_BIN" "$PACKAGE" "$VERSION"
+        working-directory: ${{ runner.temp }}/work/src
+        run: >-
+          zcaml dist --ocaml "$OCAML_VERSION" -t "native,${TARGETS// /,}"
+          -p "$PACKAGE" --name "$PACKAGE" --version "${NAME#"$PACKAGE-"}"
+          --install-file --format tar.gz -o "$GITHUB_WORKSPACE/archives"
 
       - name: Set up QEMU & Wine
         run: |
@@ -136,6 +133,10 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/work/out"
+          for t in $NATIVE $TARGETS; do
+            mkdir -p "$out/$t"
+            tar -xzf "archives/$NAME-$t.tar.gz" -C "$out/$t"
+          done
           # Runs the test in <image> for <platform>, with the checkout at /w.
           in_docker() {
             docker run --rm --platform "$1" -v "$PWD:/w" -v "$out:/o" -w /w "$2" \
@@ -152,17 +153,6 @@ jobs:
               *) echo "error: no way to run $t's" >&2; exit 1 ;;
             esac
           done
-
-      - name: Package
-        run: |
-          set -euo pipefail
-          mkdir archives
-          for t in $NATIVE $TARGETS; do
-            tar --sort=name --owner=0 --group=0 -czf "archives/$NAME-$t.tar.gz" -C "$RUNNER_TEMP/work/out/$t" .
-          done
-          (cd archives && sha256sum -- *.tar.gz > SHA256SUMS)
-          ls -l archives
-          cat archives/SHA256SUMS
 
       - name: Upload archives
         uses: actions/upload-artifact@v4
@@ -238,5 +228,5 @@ jobs:
           else
             gh release create "$TAG_NAME" "${files[@]}" \
               --title "$PACKAGE $VERSION (zcaml build ${TAG_NAME##*.})" \
-              --notes "$PACKAGE $VERSION, built from its sources for every zcaml host with the $OCAML_TAG toolchains. Binary packages of it for dune pkg's dev tools (dune tools exec, dune fmt) are in zcaml's overlay."
+              --notes "$PACKAGE $VERSION, built from its sources for every zcaml host with zcaml's OCaml $OCAML_VERSION toolchains. Binary packages of it for dune pkg's dev tools (dune tools exec, dune fmt) are in zcaml's overlay."
           fi

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Smoke-tests a dev tool build.sh built, for a target: ocamlformat formats code,
-# ocamllsp answers an LSP initialize request.
+# Smoke-tests a dev tool built for a target: ocamlformat formats code, ocamllsp
+# answers an LSP initialize request.
 #
 #   devtools/test.sh <dir> <package> <version> [<runner>...]
 #
-# <dir> is build.sh's out/<target>. <runner> runs its executables, if they don't
-# run here: `qemu-aarch64 -L <sysroot>`, `wine`, `arch -x86_64`.
+# <dir> is the target's archive (`zcaml dist`'s, a release's), extracted. <runner>
+# runs its executables, if they don't run here: `qemu-aarch64 -L <sysroot>`,
+# `wine`, `arch -x86_64`.
 set -euo pipefail
 
 dir="$1"
