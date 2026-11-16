@@ -1,0 +1,330 @@
+name: CLI
+
+# Release tags: zcaml-v<version>, build.zig.zon's version (checked against the
+# build), which `zcaml --version` prints:
+#   zcaml-v0.1.0 -> zcaml 0.1.0
+# Never move an existing tag.
+#
+# The CLI is one binary per host, cross-compiled on Linux: Linux's are static, for
+# glibc and musl systems alike. It installs the releases zcaml.dev's index has
+# (src/Index.zig: OCaml, dune, Zig, the macOS SDK), checked with the key it's
+# built with (index.pub), so the index is published first. Each is then tested end
+# to end on its host (scripts/test-cli.sh: `zcaml dist` of test/cli/hello, for the
+# host and other targets, and `zcaml run`): Linux's on Ubuntu and in Alpine
+# containers, macOS's natively and under Rosetta, Windows' on Windows.
+#
+# The action (action.yml) is tested with them: it installs each build, and builds
+# test/cli/hello. It installs the release action/SHA256SUMS is of: see
+# RELEASING.md.
+
+on:
+  push:
+    tags:
+      - "zcaml-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  ZIG_VERSION: "0.17.0"
+
+jobs:
+  build:
+    name: Build
+    runs-on: depot-ubuntu-24.04-4
+    timeout-minutes: 20
+    env:
+      HOSTS: x86_64-linux aarch64-linux x86_64-macos aarch64-macos x86_64-windows
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Run the unit tests
+        run: zig build test --summary failures
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          for h in $HOSTS; do
+            case "$h" in
+              *-linux) target="$h-musl" ;; # static
+              *-windows) target="$h-gnu" ;;
+              *) target="$h" ;;
+            esac
+            zig build --summary failures -Doptimize=ReleaseSafe -Dtarget="$target" -p "out/$h"
+          done
+
+      - id: version
+        name: Check the version
+        env:
+          REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(out/x86_64-linux/bin/zcaml --version)"
+          version="${version#zcaml }"
+          if [[ "$REF" == refs/tags/* && "$REF_NAME" != "zcaml-v$version" ]]; then
+            echo "error: the tag '$REF_NAME' isn't zcaml-v$version, build.zig.zon's version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir archives
+          for h in $HOSTS; do
+            name="zcaml-$VERSION-$h"
+            if [[ $h == *-windows ]]; then
+              (cd "out/$h" && TZ=UTC zip -X -q "$OLDPWD/archives/$name.zip" bin/zcaml.exe)
+            else
+              tar --sort=name --owner=0 --group=0 --mtime=@0 -cf - -C "out/$h" bin/zcaml | gzip -n >"archives/$name.tar.gz"
+            fi
+          done
+          (cd archives && sha256sum -- zcaml-* > SHA256SUMS)
+          ls -l archives
+          cat archives/SHA256SUMS
+
+      - name: Upload archives
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli
+          path: archives/*
+          compression-level: 0
+
+  # Each test job installs the build with the action, as a workflow would, from
+  # the archives instead of a release's: action/SHA256SUMS is the build's.
+  test-linux:
+    name: Test on Linux (${{ matrix.arch }})
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # What runs the targets it tests: Wine, QEMU with the target's glibc,
+          # musl's loader. macOS's are built and skipped.
+          - arch: x86_64
+            runner: depot-ubuntu-24.04-4
+            packages: wine qemu-user libc6-arm64-cross musl
+            targets: x86_64-windows-gnu aarch64-linux-gnu x86_64-linux-musl aarch64-macos-none
+            build_targets: aarch64-linux-musl x86_64-macos-none
+          - arch: aarch64
+            runner: depot-ubuntu-24.04-arm-4
+            packages: qemu-user libc6-amd64-cross
+            targets: x86_64-linux-gnu
+            build_targets: x86_64-windows-gnu aarch64-macos-none
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          name: cli
+          path: releases/zcaml-v${{ needs.build.outputs.version }}
+
+      - name: Point the action at the build
+        run: |
+          cp releases/*/SHA256SUMS action/
+          echo "ZCAML_RELEASES_URL=file://$PWD/releases" >> "$GITHUB_ENV"
+
+      - name: Install zcaml
+        uses: ./
+
+      - name: Set up Wine & QEMU
+        run: |
+          set -euo pipefail
+          sudo apt-get update -yq
+          sudo apt-get install -yq --no-install-recommends ${{ matrix.packages }}
+
+      - name: Test (glibc)
+        env:
+          TARGETS: ${{ matrix.targets }}
+          BUILD_TARGETS: ${{ matrix.build_targets }}
+          WINEDEBUG: "-all"
+        run: scripts/test-cli.sh "$(command -v zcaml)"
+
+      - name: Test (musl)
+        run: |
+          docker run --rm -v "$PWD:/w" -v "$(dirname "$(command -v zcaml)"):/zcaml" -w /w alpine:3.22 \
+            sh -c "apk add --no-cache bash >/dev/null && scripts/test-cli.sh /zcaml/zcaml"
+
+      - id: action
+        name: Test the action
+        uses: ./
+        with:
+          ocaml: 5.5.1
+          targets: native, aarch64-macos
+          test: |
+            hello --version
+            hello action
+          working-directory: test/cli/hello
+
+      - name: Check the action's output
+        working-directory: test/cli/hello
+        env:
+          ARTIFACTS: ${{ steps.action.outputs.artifacts }}
+        run: ../../../scripts/test-action.sh 2
+
+  test-macos:
+    name: Test on macOS
+    needs: build
+    runs-on: depot-macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure Rosetta 2 is available
+        run: |
+          if ! /usr/bin/pgrep -q oahd; then
+            sudo softwareupdate --install-rosetta --agree-to-license || true
+          fi
+
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          name: cli
+          path: releases/zcaml-v${{ needs.build.outputs.version }}
+
+      - name: Point the action at the build
+        run: |
+          cp releases/*/SHA256SUMS action/
+          echo "ZCAML_RELEASES_URL=file://$PWD/releases" >> "$GITHUB_ENV"
+
+      - name: Install zcaml
+        uses: ./
+
+      # Intel's executables run under Rosetta: tested, not skipped.
+      - name: Test (native)
+        env:
+          TARGETS: x86_64-macos-none
+          BUILD_TARGETS: x86_64-linux-musl x86_64-windows-gnu
+        run: scripts/test-cli.sh "$(command -v zcaml)"
+
+      - name: Test (Rosetta 2)
+        run: |
+          set -euo pipefail
+          mkdir intel
+          tar -xzf releases/*/zcaml-*-x86_64-macos.tar.gz -C intel
+          scripts/test-cli.sh intel/bin/zcaml arch -x86_64
+
+      - id: action
+        name: Test the action
+        uses: ./
+        with:
+          ocaml: 5.5.1
+          targets: native, x86_64-macos
+          test: |
+            hello --version
+            hello action
+          working-directory: test/cli/hello
+
+      - name: Check the action's output
+        working-directory: test/cli/hello
+        env:
+          ARTIFACTS: ${{ steps.action.outputs.artifacts }}
+        run: ../../../scripts/test-action.sh 2
+
+  test-windows:
+    name: Test on Windows
+    needs: build
+    runs-on: depot-windows-2025-4
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          name: cli
+          path: releases/zcaml-v${{ needs.build.outputs.version }}
+
+      - name: Point the action at the build
+        run: |
+          cp releases/*/SHA256SUMS action/
+          echo "ZCAML_RELEASES_URL=file:///$(cygpath -m "$PWD")/releases" >> "$GITHUB_ENV"
+
+      - name: Install zcaml
+        uses: ./
+
+      - name: Test
+        env:
+          BUILD_TARGETS: x86_64-linux-musl aarch64-macos-none
+        run: scripts/test-cli.sh "$(command -v zcaml)"
+
+      # Linux's executables don't run here: built, and their test skipped.
+      - id: action
+        name: Test the action
+        uses: ./
+        with:
+          ocaml: 5.5.1
+          targets: native, x86_64-linux-musl
+          test: |
+            hello --version
+            hello action
+          working-directory: test/cli/hello
+
+      - name: Check the action's output
+        working-directory: test/cli/hello
+        env:
+          ARTIFACTS: ${{ steps.action.outputs.artifacts }}
+        run: ../../../scripts/test-action.sh 2
+
+  publish:
+    name: Publish
+    needs: [build, test-linux, test-macos, test-windows]
+    if: startsWith(github.ref, 'refs/tags/zcaml-v')
+    runs-on: depot-ubuntu-24.04-2
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tests did, but a release with another key would install nothing.
+      - name: Check the key it's built with signs zcaml.dev's index
+        run: |
+          set -euo pipefail
+          sudo apt-get install -yq --no-install-recommends minisign >/dev/null
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/v1.json" https://zcaml.dev/index/v1.json
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/v1.json.minisig" https://zcaml.dev/index/v1.json.minisig
+          minisign -V -p index.pub -m "$RUNNER_TEMP/v1.json"
+
+      - name: Download archives
+        uses: actions/download-artifact@v4
+        with:
+          name: cli
+          path: archives
+
+      - name: Create GitHub Release and attach the archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          files=(archives/zcaml-* archives/SHA256SUMS)
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$TAG_NAME" "${files[@]}" \
+              --title "zcaml $VERSION" \
+              --notes "The zcaml CLI $VERSION, for every zcaml host: builds dune pkg projects for other platforms (\`zcaml dist\`), with the OCaml toolchains, dune and Zig it installs. Linux's is static: for glibc and musl systems."
+          fi

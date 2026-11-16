@@ -1,0 +1,63 @@
+name: zcaml
+description: Build a dune pkg project for other platforms, with zcaml's OCaml toolchains
+
+# Installs zcaml and runs `zcaml dist`: the project's packages' files, built for
+# each target and archived, with their checksums, in dist/. Without `ocaml`, it
+# only installs zcaml, for steps that run it themselves (`zcaml env --github`,
+# `zcaml dist` with other options, `zcaml run`).
+#
+#   - uses: actions/checkout@v4
+#   - uses: zcaml/zcaml@v1
+#     with:
+#       ocaml: 5.5.1
+#       targets: native, aarch64-linux-musl, x86_64-windows, aarch64-macos
+#       test: hello --version
+#
+# The project needs nothing of zcaml's: its lock directory is the dependencies,
+# and zcaml says what it lacks for a target.
+
+inputs:
+  ocaml:
+    description: >-
+      The OCaml version, as the project's lock directory has it (5.5.1). Without
+      it, the action only installs zcaml.
+    required: false
+    default: ""
+  targets:
+    description: "Targets to build for, comma or space separated: `native`, `x86_64-windows`, `aarch64-macos`, `aarch64-linux-musl`, ..."
+    required: false
+    default: native
+  test:
+    description: >-
+      Commands to run each target's build with, one per line, before it's
+      archived: an executable the project installs, and its arguments. Under
+      Wine or QEMU as the target needs, which the job installs.
+    required: false
+    default: ""
+  working-directory:
+    description: The project's directory, where dune-project is
+    required: false
+    default: "."
+
+outputs:
+  artifacts:
+    description: The files it made (the archives and SHA256SUMS), one per line, relative to the project's directory
+    value: ${{ steps.dist.outputs.artifacts }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install zcaml
+      shell: bash
+      run: '"$GITHUB_ACTION_PATH/action/install.sh"'
+
+    - id: dist
+      name: zcaml dist
+      if: inputs.ocaml != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_OCAML: ${{ inputs.ocaml }}
+        INPUT_TARGETS: ${{ inputs.targets }}
+        INPUT_TEST: ${{ inputs.test }}
+      run: '"$GITHUB_ACTION_PATH/action/dist.sh"'
