@@ -55,3 +55,17 @@ rm "$dir/$archive"
 
 echo "$dir/bin" >>"$GITHUB_PATH"
 "$dir/bin/zcaml" --version
+
+# dune pkg builds a project's packages where paths can be longer than 260
+# characters, which Windows only takes from programs when this is on. A
+# runner's an administrator; one that isn't gets zcaml's warning instead.
+if [[ "$os" == windows ]]; then
+  key='HKLM\SYSTEM\CurrentControlSet\Control\FileSystem'
+  if ! reg query "$key" //v LongPathsEnabled 2>/dev/null | grep -q '0x1'; then
+    if reg add "$key" //v LongPathsEnabled //t REG_DWORD //d 1 //f >/dev/null 2>&1; then
+      echo "::notice::zcaml turned on Windows' long paths (LongPathsEnabled), for dune pkg's builds"
+    else
+      echo "::warning::Windows' long paths are off, and turning them on needs an administrator: dune pkg's builds may fail"
+    fi
+  fi
+fi
