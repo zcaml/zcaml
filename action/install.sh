@@ -40,10 +40,11 @@ dir="$RUNNER_TEMP/zcaml-$version"
 rm -rf "$dir"
 mkdir -p "$dir"
 curl -fsSL --retry 3 -o "$dir/$archive" "$releases/zcaml-v$version/$archive"
+# From stdin: Git Bash's escapes a path with a `\`, and so the line.
 if command -v sha256sum >/dev/null; then
-  got="$(sha256sum "$dir/$archive")"
+  got="$(sha256sum <"$dir/$archive")"
 else
-  got="$(shasum -a 256 "$dir/$archive")"
+  got="$(shasum -a 256 <"$dir/$archive")"
 fi
 [[ "${got%% *}" == "$sha256" ]] || fail "$archive isn't the released one: its SHA-256 is ${got%% *}, not $sha256"
 case "$archive" in
