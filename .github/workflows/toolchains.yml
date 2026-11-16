@@ -537,3 +537,14 @@ jobs:
                 });
               }
             }
+
+  index:
+    name: Publish the index
+    needs: publish-toolchains
+    if: startsWith(github.ref, 'refs/tags/ocaml-')
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/site.yml
+    secrets: inherit

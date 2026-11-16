@@ -1,0 +1,92 @@
+name: Site
+
+# zcaml.dev, on GitHub Pages: site/ and zcaml's index (src/Index.zig), which
+# build/index.zig writes from the published releases. A zcaml installs only
+# what the index has, so it's signed: with the minisign key whose public half is
+# index.pub, from the `index` environment's ZCAML_INDEX_KEY secret.
+#
+# It runs after each OCaml or dune release (toolchains.yml, dune.yml), and when
+# what it publishes changes on main. A release made a prerelease is out of the
+# next index: run this to take it out now.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - build/index.zig
+      - src/Index.zig
+      - index.pub
+      - .github/workflows/site.yml
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# One deploy at a time, the last one last: its index is the newest.
+concurrency:
+  group: site
+  cancel-in-progress: false
+
+env:
+  ZIG_VERSION: "0.17.0"
+
+jobs:
+  build:
+    name: Build and sign
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Its deployment branch rule keeps the key to main.
+    environment: index
+    steps:
+      # main's, also when a release's tag calls it.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+          use-cache: false
+
+      - name: Write the index
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: zig build index -- "$PWD/_site/index/v1.json"
+
+      - name: Sign it
+        env:
+          ZCAML_INDEX_KEY: ${{ secrets.ZCAML_INDEX_KEY }}
+        run: |
+          set -euo pipefail
+          sudo apt-get install -yq --no-install-recommends minisign >/dev/null
+          key="$RUNNER_TEMP/index.key"
+          trap 'rm -f "$key"' EXIT
+          (umask 077 && printf '%s\n' "$ZCAML_INDEX_KEY" >"$key")
+          serial="$(jq -r .serial _site/index/v1.json)"
+          minisign -S -s "$key" -m _site/index/v1.json -t "zcaml index v1, serial $serial"
+          # What the CLI checks it with.
+          minisign -V -p index.pub -m _site/index/v1.json
+
+      - name: Add the site
+        run: cp -R site/. _site/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
